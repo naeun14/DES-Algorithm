@@ -3,13 +3,13 @@
 #include <string.h>
 #include "des table.h"
 
-int L0[8][4]; // left32 plaintext
-int R0[8][4]; // right32 plaintext
+int L0[32]; // left32 plaintext
+int R0[32]; // right32 plaintext
 int Plaintext_8_6[8][6];
 int Plaintext_48[48];
 int Plaintext_32[32];
 int R_AfterXOR_Key[48]; //key와 Xor 연산
-int R_AfterXOR_L[48]; //left & right XOR 연산
+int R_AfterXOR_L[32]; //left & right XOR 연산
 int R_AfterSBox_8_4[8][4]; //s box 연산 결과 
 int plaintext[64]; //평문
 int Original_key[64] = { 1,0,1,0, 0,0,1,0, 1,1,0,1, 1,0,0,0,
@@ -52,32 +52,25 @@ void Permutation_PI() {
 
 //평문 left right division
 void Divide_L_R(int plaint[64]) {
-    int i, j; int k = 0;
-    for (i = 0; i < 8; i++) {
-        for (j = 0; j < 4; j++) {
-            L0[i][j] = plaint[j + k];
-            R0[i][j] = plaint[j + 32 + k];
-        }
-        k = k + 4;
-    }
+    int i; 
+    for (i = 0; i < 32; i++) {
+		L0[i] = plaint[i];
+		R0[i] = plaint[i+32];
+	}
 }
 
-// L0[8][4]와 R0[8][4]를 Plaintext[64]로 합치는 함수
+// L0[32]와 R0[32]를 Plaintext[64]로 합치는 함수
 void combineToPlaintext() {
     int index = 0;
 
     // L0 행렬의 요소를 상위 32개로 복사
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 4; col++) {
-            plaintext[index++] = L0[row][col];
-        }
+    for (int row = 0; row < 32; row++) {
+		plaintext[index++] = L0[row];
     }
 
     // R0 행렬의 요소를 하위 32개로 복사
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 4; col++) {
-            plaintext[index++] = R0[row][col];
-        }
+    for (int row = 0; row < 32; row++) {
+        plaintext[index++] = R0[row];
     }
 }
 
@@ -95,24 +88,24 @@ void Extend_R(int arr[8][4], int exArr[8][6]) {
 }
 
 // Arr[8][6] -> Arr[48]
-void Combine_8_6bit_to_48bit(int Arr2[8][6], int Arr[48]) {
+void Combine_8_6bit_to_48bit(int Plain_8_6[8][6], int Plain[48]) {
     int i, j;
     int k = 0;
 
     for (i = 0; i < 8; i++) {
         for (j = 0; j < 6; j++) {
-            Arr[j + k] = Arr2[i][j];
+            Plain[j + k] = Plain_8_6[i][j];
         }
         k = k + 6;
     }
 }
 
 // 48bit R 과 Key가 xor한 결과
-void XOR_key(int Arr[], int Arr2[]) {
+void XOR_key(int Plain[], int key[]) {
     int i = 0;
 
     for (i = 0; i < 48; i++) {
-        R_AfterXOR_Key[i] = Arr[i] ^ Arr2[i];
+        R_AfterXOR_Key[i] = Plain[i] ^ key[i];
     }
 }
 
@@ -246,14 +239,10 @@ void Key_generate(int key[]) {
 
 void Save_LR() {
     int i = 0; int j = 0;
-    int count = 0;
 
-    for (i = 0; i < 8; i++) {
-        for (j = 0; j < 4; j++) {
-            L0[i][j] = R0[i][j];
-            R0[i][j] = R_AfterXOR_L[i + count];
-        }
-        count += 4;
+    for (i = 0; i < 32; i++) {
+		L0[i] = R0[i];
+		R0[i] = R_AfterXOR_L[i];
     }
 }
 
@@ -265,36 +254,60 @@ void charToBinary(char c, FILE* outputFile) {
 }
 
 void DES_Round(int i) {
-    Extend_R(R0, Plaintext_8_6);  //평문 확장 
-    Combine_8_6bit_to_48bit(Plaintext_8_6, Plaintext_48); //[8][6] -> 48 
-    XOR_key(Plaintext_48, subkey[i]);
-    Divide_48bit_to_8_6(R_AfterXOR_Key, Plaintext_8_6); //48 -> [8][6]
-    Sbox(Plaintext_8_6);  //s_box 연산
-    Permutation_P(Plaintext_32);  //permutation P (sbox 연산이 끝난 결과를 섞음)
-    XOR_LR(Plaintext_32, L0);  //L문 R문 XOR
-    Save_LR(); // 변경된 L문 R문 저장
+	Extend_R(R0, Plaintext_8_6);  //평문 확장 
+	Combine_8_6bit_to_48bit(Plaintext_8_6, Plaintext_48); //[8][6] -> 48 
+	XOR_key(Plaintext_48, subkey[i]);
+	Divide_48bit_to_8_6(R_AfterXOR_Key, Plaintext_8_6); //48 -> [8][6]
+	Sbox(Plaintext_8_6);  //s_box 연산
+	Permutation_P(Plaintext_32);  //permutation P (sbox 연산이 끝난 결과를 섞음)
+	XOR_LR(Plaintext_32, L0);  //L문 R문 XOR
+	Save_LR(); // 변경된 L문 R문 저장
+}
+
+void key_reverse() {
+    int temp[16][32];
+    int i, j;
+    
+    // subkey를 temp에 할당
+    for (int row = 0; row <16; row++) {
+        for (int col = 0; col < 32; col++) {
+            temp[row][col] = subkey[row][col];
+        }
+    }
+    /*printf("key:  \n");
+    for (i = 0; i < 16; i++) {
+        for (j = 0; j < 32; j++)
+            printf("%d ", subkey[i][j]);
+        printf("\n");
+    }*/
+
+    for (int row = 0; row < 16; row++) {
+        for (int col = 0; col < 32; col++) {
+            subkey[row][col] = subkey[(15-row)][col];
+        }
+    }
+
+    /*printf("key:  \n");
+
+    for (i = 0; i < 16; i++) {
+        for (j = 0; j < 32; j++)
+            printf("%d ", subkey[i][j]);
+        printf("\n");
+    }*/
+    
 }
 
 void DES_Alggorithm(int i) {
-    if (i == 1) //암호화
-    {
-        Plaintext_AfterPermutation(); //평문 ip permutation
-        Key_generate(Original_key); //subkey 생성
-        Divide_L_R(plaintext);  //평문 나눔
-        for (int i = 0; i < 16; i++)
-            DES_Round(i);
-        combineToPlaintext(); // L(32)과 R(32)을 64비트 평문으로 합침
-        Permutation_PI();  //역 IP 연산 수행
+
+	Plaintext_AfterPermutation(); //평문 ip permutation
+	Key_generate(Original_key); //subkey 생성
+    if (i == 0) {
+        key_reverse();
     }
-    else {  //복호화  
-        Plaintext_AfterPermutation(); //평문 ip permutation
-        Key_generate(Original_key); //subkey 생성
-        Divide_L_R(plaintext);  //평문 나눔
-        for (int i = 15; i >= 0; i--)
-            DES_Round(i);
-        combineToPlaintext(); // L(32)과 R(32)을 64비트 평문으로 합침
-        Permutation_PI();  //역 IP 연산 수행
-    }
+	Divide_L_R(plaintext);  //평문 나눔
+	DES_Round(i);
+	combineToPlaintext(); // L(32)과 R(32)을 64비트 평문으로 합침
+	Permutation_PI();  //역 IP 연산 수행
 }
 
 
